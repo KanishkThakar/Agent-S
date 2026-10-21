@@ -106,8 +106,44 @@ connect();
 
 // ---- The Agent S tab ------------------------------------------------------------
 
-function cdp(method, params = {}) {
+// Chrome's PDF viewer and other built-in pages cannot be debugged, so opening one
+// detaches Agent S. Go back to a page it can use and tell the agent what happened.
+async function recoverTab() {
+  const tab = await chrome.tabs.get(session.tabId).catch(() => null);
+  if (!tab) {
+    session.detachReason = "the tab was closed";
+    return false;
+  }
+  const url = tab.url || tab.pendingUrl || "the page";
+  for (const goBack of [false, true]) {
+    if (goBack) {
+      await chrome.tabs.goBack(tab.id).catch(() => chrome.tabs.update(tab.id, { url: "about:blank" }));
+      await sleep(1000);
+    }
+    try {
+      await chrome.debugger.attach({ tabId: tab.id }, "1.3");
+    } catch (error) {
+      continue;
+    }
+    session.detachReason = null;
+    session.cursor = null;
+    await chrome.debugger.sendCommand({ tabId: tab.id }, "Page.enable");
+    await chrome.debugger.sendCommand({ tabId: tab.id }, "Emulation.setFocusEmulationEnabled", { enabled: true });
+    if (goBack) {
+      session.notes.push(
+        `${url} opened in a Chrome page Agent S cannot use (such as the PDF viewer), so the tab went back. ` +
+          `To save that file to the computer, use agent.download("${url}").`
+      );
+    }
+    return true;
+  }
+  session.detachReason = `${url} cannot be controlled`;
+  return false;
+}
+
+async function cdp(method, params = {}) {
   if (!session) throw new Error("No Agent S tab is open. Start a task first.");
+  if (session.detachReason === "target_closed") await recoverTab();
   if (session.detachReason) {
     throw new Error(
       session.detachReason === "canceled_by_user"
@@ -332,7 +368,8 @@ const COMMANDS = {
     if (!window) window = await chrome.windows.create({ focused: false });
     // Opened in the background so your current tab stays in front.
     const tab = await chrome.tabs.create({ windowId: window.id, url: "about:blank", active: false });
-    session = { tabId: tab.id, groupId: null, cursor: null, detachReason: null };
+    // notes: things the agent cannot see in a screenshot, passed on with the next one
+    session = { tabId: tab.id, groupId: null, cursor: null, detachReason: null, notes: [] };
     session.groupId = await addToGroup(tab.id, window.id);
     await attach(tab.id);
     if (url && url !== "about:blank") await navigate(url);
@@ -352,12 +389,24 @@ const COMMANDS = {
   },
 
   async screenshot() {
+    // Show the agent every page at 100%, whatever zoom you saved for the site. Per-tab
+    // zoom leaves your own zoom levels alone; navigation resets it, so set it each time.
+    await chrome.tabs.setZoomSettings(session.tabId, { scope: "per-tab" }).catch(() => {});
+    if ((await chrome.tabs.getZoom(session.tabId).catch(() => 1)) !== 1) {
+      await chrome.tabs.setZoom(session.tabId, 1).catch(() => {});
+      await sleep(300);
+    }
     await cursorCall("hide");
     try {
       const metrics = await cdp("Page.getLayoutMetrics");
       const viewport = metrics.cssVisualViewport || metrics.visualViewport;
       const shot = await withTimeout(cdp("Page.captureScreenshot", { format: "png" }), 15000, "Taking a screenshot of the Agent S tab timed out.");
-      return { data: shot.data, width: Math.round(viewport.clientWidth), height: Math.round(viewport.clientHeight) };
+      return {
+        data: shot.data,
+        width: Math.round(viewport.clientWidth),
+        height: Math.round(viewport.clientHeight),
+        notes: session.notes.splice(0),
+      };
     } finally {
       await cursorCall("show");
     }
@@ -415,6 +464,20 @@ const COMMANDS = {
 
   async keys({ keys }) {
     await pressCombination(keys);
+  },
+
+  // Saves a file to the Downloads folder with Chrome's download manager, so no viewer
+  // or Save dialog gets in the way. Resolves when the download has finished.
+  async download({ url }) {
+    const id = await chrome.downloads.download({ url, conflictAction: "uniquify" });
+    const start = Date.now();
+    while (Date.now() - start < 300000) {
+      const [item] = await chrome.downloads.search({ id });
+      if (item && item.state === "complete") return { filename: item.filename, bytes: item.fileSize };
+      if (item && item.state === "interrupted") throw new Error(`The download of ${url} failed: ${item.error}`);
+      await sleep(300);
+    }
+    throw new Error(`The download of ${url} did not finish within 5 minutes.`);
   },
 
   // agent_s asks for this when the extension files in the repository are newer.

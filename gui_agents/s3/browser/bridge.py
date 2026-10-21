@@ -56,6 +56,8 @@ class ChromeBridge:
         self._started = threading.Event()
         self._start_error = None
         self._reload_requested = False
+        # What happened that the agent cannot see in a screenshot, such as downloads
+        self.notes = []
         threading.Thread(target=self._run, daemon=True).start()
         self._started.wait()
         if self._start_error:
@@ -193,6 +195,7 @@ class ChromeBridge:
     def screenshot(self):
         """Return (png_bytes, width, height) of the agent's tab, in CSS pixels."""
         result = self.call("screenshot")
+        self.notes.extend(result.get("notes") or [])
         width, height = result["width"], result["height"]
         image = Image.open(io.BytesIO(base64.b64decode(result["data"])))
         if image.size != (width, height):
@@ -201,10 +204,21 @@ class ChromeBridge:
         image.convert("RGB").save(buffered, format="PNG")
         return buffered.getvalue(), width, height
 
+    def take_notes(self):
+        """Return and clear what happened that a screenshot does not show."""
+        notes, self.notes = self.notes, []
+        return notes
+
     # ---- Actions (called by BrowserACI's code) ------------------------------------
 
     def open_url(self, url: str):
         self.call("navigate", url=url)
+
+    def download(self, url: str):
+        result = self.call("download", url=url, timeout=330)
+        note = f"Downloaded {url} to {result['filename']} ({result['bytes']} bytes)."
+        print(note)
+        self.notes.append(note)
 
     def go_back(self):
         self.call("goBack")

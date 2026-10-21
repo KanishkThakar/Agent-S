@@ -96,6 +96,10 @@ class TestBrowserACI(unittest.TestCase):
         self.assertEqual(
             self.aci.hotkey(["command", "a"]), "browser.hotkey(['command', 'a'])"
         )
+        self.assertEqual(
+            self.aci.download("https://example.com/a.pdf"),
+            "browser.download('https://example.com/a.pdf')",
+        )
 
     def test_desktop_actions_are_refused(self):
         with self.assertRaises(NotImplementedError):
@@ -135,6 +139,35 @@ class TestChromeBridge(unittest.TestCase):
         png, width, height = self.bridge.screenshot()
         self.assertEqual((width, height), (100, 50))
         self.assertEqual(Image.open(io.BytesIO(png)).size, (100, 50))
+
+    def test_download_and_extension_notes_reach_the_agent(self):
+        def handler(message):
+            if message["method"] == "download":
+                return {"filename": "/Users/me/Downloads/a.pdf", "bytes": 10}, None
+            if message["method"] == "screenshot":
+                notes = ["The PDF viewer could not be used, so the tab went back."]
+                return {
+                    "data": png_b64(10, 10),
+                    "width": 10,
+                    "height": 10,
+                    "notes": notes,
+                }, None
+            return None, None
+
+        extension = FakeExtension(self.port, handler)
+        self.addCleanup(extension.close)
+        self.bridge.wait_for_extension(5)
+
+        self.bridge.download("https://example.com/a.pdf")
+        self.bridge.screenshot()
+        notes = self.bridge.take_notes()
+        self.assertEqual(len(notes), 2)
+        self.assertIn(
+            "Downloaded https://example.com/a.pdf to /Users/me/Downloads/a.pdf",
+            notes[0],
+        )
+        self.assertIn("PDF viewer", notes[1])
+        self.assertEqual(self.bridge.take_notes(), [])
 
     def test_extension_errors_are_raised(self):
         extension = FakeExtension(self.port, lambda m: (None, "the tab was closed"))

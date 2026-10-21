@@ -189,6 +189,13 @@ By default Agent S drives your real mouse and keyboard, so you have to leave the
 
 The agent opens its tab in the background, so the tab you are on stays in front. When it finishes, the group is renamed "Agent S ✓" (or "Agent S ✗" if it failed) and you get a notification. Chrome shows a "started debugging this browser" bar while it works; clicking **Cancel** there stops the agent. `--start_url` sets the first page (Google by default).
 
+It works through a task without stopping to ask you:
+- **Downloads** go straight to your Downloads folder through Chrome's download manager, with no PDF viewer or Save dialog in the way (`agent.download(url)`). Links that download when clicked work too.
+- **Copy and paste** use your system clipboard, within a page or between pages.
+- **Pages it cannot control**, such as Chrome's PDF viewer, make the tab go back automatically, and the agent is told why.
+- **Zoom**: every page is shown to the agent at 100%, whatever zoom you saved for the site; your own zoom levels are not changed.
+- **Updates**: when the extension files in this repository change, `agent_s` makes the loaded extension reload itself.
+
 Because it uses your signed-in Chrome, the agent can act on any site you are logged in to. Give it tasks you would be comfortable doing yourself, and watch its tab for anything sensitive. It accepts plain alerts on its own but dismisses confirmation prompts, so it never agrees to something for you. Only web pages are available in this mode, not other apps.
 
 #### Use Agent S from Claude Code

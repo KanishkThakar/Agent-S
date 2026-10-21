@@ -23,6 +23,8 @@ There are two modes. Run either one in the background, because a task can take s
 agent_s --browser --task "Search Wikipedia for Alan Turing and open his article" --max_steps 15
 ```
 
+In this mode it downloads files straight to the Downloads folder, copies and pastes on its own, and works through the task without asking for confirmation. The download line it prints ("Downloaded <url> to <path>") tells you where a file went.
+
 **Desktop apps: no flag.** Agent S then drives the real mouse and keyboard. Tell the user it will take over both until it finishes, that they should not type meanwhile, and that pressing Ctrl+C in the terminal pauses it.
 
 ```bash

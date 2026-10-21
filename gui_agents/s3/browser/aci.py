@@ -1,13 +1,19 @@
 from typing import Dict, List, Optional
 
 from gui_agents.s3.agents.grounding import OSWorldACI, agent_action
+from gui_agents.s3.browser.bridge import EDIT_MODIFIER
 
 # Shown to the worker in place of the operating system name.
 BROWSER_PLATFORM = (
     "a Google Chrome tab of your own, inside the 'Agent S' tab group. The screenshot shows "
     "only the web page, without Chrome's address bar or tabs. Use agent.open_url() to go to "
     "a web address and agent.go_back() to go back; shortcuts for Chrome itself (new tab, "
-    "address bar, closing tabs) do not work. You cannot use apps outside this tab"
+    "address bar, closing tabs) do not work. To save a file such as a PDF to the computer, "
+    "use agent.download() with its web address instead of opening it. Copy and paste with "
+    f"agent.hotkey(['{EDIT_MODIFIER}', 'c']) and agent.hotkey(['{EDIT_MODIFIER}', 'v']). "
+    "Messages about downloads and pages that could not be opened appear in the Current Text "
+    "Buffer. Work through the whole task on your own, without asking for confirmation. "
+    "You cannot use apps outside this tab"
 )
 
 
@@ -52,6 +58,14 @@ class BrowserACI(OSWorldACI):
     def go_back(self):
         """Go back to the previous page in your Chrome tab"""
         return "browser.go_back()"
+
+    @agent_action
+    def download(self, url: str):
+        """Download a file (PDF, image, document, archive...) from a web address to the computer's Downloads folder
+        Args:
+            url:str, the web address of the file, e.g. "https://example.com/report.pdf"
+        """
+        return f"browser.download({url!r})"
 
     @agent_action
     def click(

@@ -156,6 +156,25 @@ def scale_screen_dimensions(width: int, height: int, max_dim_size: int):
     return safe_width, safe_height
 
 
+def notify_finished(status: str):
+    """Print the result and show a notification that does not wait for a click."""
+    print(f"\nAgent S finished the task: {status}")
+    if platform.system() == "Darwin":
+        command = [
+            "osascript",
+            "-e",
+            f'display notification "Task {status}" with title "Agent S"',
+        ]
+    elif platform.system() == "Linux":
+        command = ["notify-send", "Agent S", f"Task {status}"]
+    else:
+        return
+    try:
+        subprocess.run(command, check=False, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def claude_grounding_dimensions(width: int, height: int):
     # Claude locates elements most accurately on screenshots of about 1280x800 (WXGA)
     scale_factor = min(1280 / width, 800 / height, 1)
@@ -195,22 +214,16 @@ def run_agent(
         # Get next action code from the agent
         info, code = agent.predict(instruction=instruction, observation=obs)
 
-        if "done" in code[0].lower() or "fail" in code[0].lower():
-            if platform.system() == "Darwin":
-                os.system(
-                    f'osascript -e \'display dialog "Task Completed" with title "OpenACI Agent" buttons "OK" default button "OK"\''
-                )
-            elif platform.system() == "Linux":
-                os.system(
-                    f'zenity --info --title="OpenACI Agent" --text="Task Completed" --width=200 --height=100'
-                )
-
+        # Match whole actions: typed text such as "I'm done" must not end the task
+        action = code[0].strip()
+        if action in ("DONE", "FAIL"):
+            notify_finished("done" if action == "DONE" else "failed")
             break
 
-        if "next" in code[0].lower():
+        if action == "NEXT":
             continue
 
-        if "wait" in code[0].lower():
+        if action == "WAIT":
             print("⏳ Agent requested wait...")
             time.sleep(5)
             continue
@@ -265,6 +278,8 @@ def run_browser_agent(agent, grounding_agent, browser, instruction: str, max_ste
             screenshot_bytes, width, height = browser.screenshot()
             # The tab can be resized between steps; coordinates follow its current size
             grounding_agent.width, grounding_agent.height = width, height
+            # Downloads and pages the tab had to leave show up in the worker's text buffer
+            grounding_agent.notes.extend(browser.take_notes())
 
             print(
                 f"\n🔄 Step {step + 1}/{max_steps}: Getting next action from agent..."
@@ -295,16 +310,7 @@ def run_browser_agent(agent, grounding_agent, browser, instruction: str, max_ste
         except Exception as e:
             logger.warning("Could not hand the Agent S tab back: %s", e)
 
-    print(f"\nAgent S finished the task: {status}")
-    if platform.system() == "Darwin":
-        subprocess.run(
-            [
-                "osascript",
-                "-e",
-                f'display notification "Task {status}" with title "Agent S"',
-            ],
-            check=False,
-        )
+    notify_finished(status)
     return status
 
 
