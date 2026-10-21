@@ -151,7 +151,44 @@ pip install -e ./agent_s4
 ```
 `pip install agent-s4` installs the same code from PyPI; with it, set `SHADOW_EVOL_SHARED_ROOT` to `osworld_setup/s4` in your clone. See [agent_s4/README.md](agent_s4/README.md) for the rest of the setup.
 
+### Use your Claude subscription (no API key)
+
+Agent S3 can run entirely on a Claude Pro or Max subscription. The `claude_code` provider sends every model call through the [Claude Code](https://claude.com/claude-code) CLI on your machine, so it uses the account the CLI is logged in with. Claude also does the grounding (finding where to click), so you need no `ANTHROPIC_API_KEY` and no UI-TARS endpoint. This is the default.
+
+1. Install Claude Code and log in once with your subscription:
+   ```bash
+   curl -fsSL https://claude.ai/install.sh | bash
+   claude
+   ```
+   Inside `claude`, run `/login` if you are not already logged in, then exit. `claude auth status` should report `"loggedIn": true`.
+2. Install Agent S from this repository with Python 3.9 to 3.12 (the PyPI release of `gui-agents` does not have the `claude_code` provider yet), plus Tesseract:
+   ```bash
+   python3.12 -m venv .venv && source .venv/bin/activate
+   pip install -e .
+   brew install tesseract
+   ```
+   Without a clone, `pip install git+https://github.com/KanishkThakar/Agent-S.git` installs the same code.
+3. Run a task:
+   ```bash
+   agent_s --task "Open Calculator and compute 12 * 34"
+   ```
+
+`--model sonnet` is the default; `--model opus`, `--model haiku` or a full model ID such as `claude-sonnet-5-5` also work. Each step makes three or four Claude calls and takes about 10 to 20 seconds, and the calls count against your subscription's usage limits. If `ANTHROPIC_API_KEY` is set in your shell, the `claude_code` provider ignores it, so the run is never billed to the API.
+
+On macOS, give your terminal Screen Recording and Accessibility permission (System Settings → Privacy & Security) so Agent S can see the screen and click.
+
+#### Use Agent S from Claude Code
+
+This repository is also a Claude Code plugin. Install it, then ask Claude Code for a desktop task (for example "use Agent S to open Calculator") and it runs `agent_s` for you:
+```bash
+claude plugin marketplace add KanishkThakar/Agent-S
+claude plugin install agent-s@agent-s
+```
+Inside Claude Code the same is `/plugin marketplace add KanishkThakar/Agent-S`, then `/plugin install agent-s@agent-s`. You still need step 2 above, so that `agent_s` is on your `PATH`.
+
 ### API Configuration
+
+The providers below are only needed if you want to use an API key instead of your Claude subscription.
 
 #### Option 1: Environment Variables
 Add to your `.bashrc` (Linux) or `.zshrc` (MacOS):
@@ -168,23 +205,30 @@ os.environ["OPENAI_API_KEY"] = "<YOUR_API_KEY>"
 ```
 
 ### Supported Models
-We support Azure OpenAI, Anthropic, Gemini, Open Router, and vLLM inference. See [models.md](models.md) for details.
+We support your Claude subscription through Claude Code (`claude_code`), plus Azure OpenAI, Anthropic, Gemini, Open Router, and vLLM inference. See [models.md](models.md) for details.
 
-### Grounding Models (Required)
-For optimal performance, we recommend [UI-TARS-1.5-7B](https://huggingface.co/ByteDance-Seed/UI-TARS-1.5-7B) hosted on Hugging Face Inference Endpoints or another provider. See [Hugging Face Inference Endpoints](https://huggingface.co/learn/cookbook/en/enterprise_dedicated_endpoints) for setup instructions.
+### Grounding Models
+With the default `claude_code` grounding provider, Claude finds the elements to click and nothing else is needed. For the highest accuracy you can instead use [UI-TARS-1.5-7B](https://huggingface.co/ByteDance-Seed/UI-TARS-1.5-7B) hosted on Hugging Face Inference Endpoints or another provider. See [Hugging Face Inference Endpoints](https://huggingface.co/learn/cookbook/en/enterprise_dedicated_endpoints) for setup instructions.
 
 ## 🚀 Usage
 
 
 > ⚡️ **Recommended Setup:**  
-> For the best configuration, we recommend using **OpenAI gpt-5-2025-08-07** as the main model, paired with **UI-TARS-1.5-7B** for grounding.  
+> With a Claude subscription, just run `agent_s --task "..."`: Claude Sonnet plans and grounds through Claude Code, with no API key.  
+> The configuration from the paper is **OpenAI gpt-5-2025-08-07** as the main model, paired with **UI-TARS-1.5-7B** for grounding.  
 
 
 ### CLI
 
 Note, this is running Agent S3, our improved agent, without bBoN. 
 
-Run Agent S3 with the required parameters:
+Run Agent S3 on your Claude subscription (the defaults):
+
+```bash
+agent_s --task "Open Calculator and compute 12 * 34"
+```
+
+Or with an OpenAI key and a UI-TARS grounding endpoint:
 
 ```bash
 agent_s \
@@ -214,20 +258,21 @@ agent_s \
 
 ⚠️ **WARNING**: The local coding environment executes arbitrary Python and Bash code locally on your machine. Only use this feature in trusted environments and with trusted inputs.
 
-#### Required Parameters
-- **`--provider`**: Main generation model provider (e.g., openai, anthropic, etc.) - Default: "openai"
-- **`--model`**: Main generation model name (e.g., gpt-5-2025-08-07) - Default: "gpt-5-2025-08-07"
-- **`--ground_provider`**: The provider for the grounding model - **Required**
-- **`--ground_url`**: The URL of the grounding model - **Required**
-- **`--ground_model`**: The model name for the grounding model - **Required**
-- **`--grounding_width`**: Width of the output coordinate resolution from the grounding model - **Required**
-- **`--grounding_height`**: Height of the output coordinate resolution from the grounding model - **Required**
+#### Model Parameters
+- **`--provider`**: Main generation model provider (e.g., claude_code, openai, anthropic, etc.) - Default: "claude_code"
+- **`--model`**: Main generation model name (e.g., sonnet, opus, gpt-5-2025-08-07) - Default: "sonnet"
+- **`--ground_provider`**: The provider for the grounding model - Default: "claude_code"
+- **`--ground_url`**: The URL of the grounding model - **Required** unless the grounding provider is claude_code
+- **`--ground_model`**: The model name for the grounding model - **Required** unless the grounding provider is claude_code, which defaults to `--model`
+- **`--grounding_width`**: Width of the output coordinate resolution from the grounding model - **Required** unless the grounding provider is claude_code, which works it out from your screen
+- **`--grounding_height`**: Height of the output coordinate resolution from the grounding model - **Required** unless the grounding provider is claude_code, which works it out from your screen
+- **`--max_steps`**: Maximum number of actions for a task - Default: 15
 
 #### Optional Parameters
 - **`--model_temperature`**: The temperature to fix all model calls to (necessary to set to 1.0 for models like o3 but can be left blank for other models)
 
 #### Grounding Model Dimensions
-The grounding width and height should match the output coordinate resolution of your grounding model:
+With claude_code grounding, Agent S scales the screenshot to fit 1280x800 and sets these for you. Otherwise, the grounding width and height should match the output coordinate resolution of your grounding model:
 - **UI-TARS-1.5-7B**: Use `--grounding_width 1920 --grounding_height 1080`
 - **UI-TARS-72B**: Use `--grounding_width 1000 --grounding_height 1000`
 

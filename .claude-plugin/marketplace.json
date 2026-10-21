@@ -1,0 +1,14 @@
+{
+  "name": "agent-s",
+  "description": "Agent S computer-use agent for Claude Code, running on your Claude subscription.",
+  "owner": {
+    "name": "Kanishk Thakar"
+  },
+  "plugins": [
+    {
+      "name": "agent-s",
+      "source": "./integrations/claude-code",
+      "description": "Let Claude Code hand GUI tasks on your computer to Agent S, running on your Claude subscription with no API key."
+    }
+  ]
+}

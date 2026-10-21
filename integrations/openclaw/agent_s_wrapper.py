@@ -37,17 +37,17 @@ def run_agent_s(task, max_steps=15, enable_reflection=True, enable_local_env=Fal
             "error": "agent_s executable not found"
         }
 
-    # Build base command
+    # Build base command. claude_code runs Claude through the `claude` CLI on your
+    # Claude subscription (Pro/Max), so no API key is needed.
     cmd = [
         agent_s_path,
-        "--provider", "anthropic",
-        "--model", "claude-sonnet-4-5",
-        "--model_temperature", "1.0",
-        "--max_trajectory_length", str(max_steps),
+        "--provider", os.environ.get("AGENT_S_PROVIDER", "claude_code"),
+        "--model", os.environ.get("AGENT_S_MODEL", "sonnet"),
+        "--max_steps", str(max_steps),
         "--task", task,
     ]
-    
-    # Add optional grounding configuration from environment variables
+
+    # Claude also does the grounding unless a UI-TARS endpoint is configured
     ground_url = os.environ.get("AGENT_S_GROUND_URL")
     ground_api_key = os.environ.get("AGENT_S_GROUND_API_KEY")
     ground_model = os.environ.get("AGENT_S_GROUND_MODEL", "ui-tars-1.5-7b")

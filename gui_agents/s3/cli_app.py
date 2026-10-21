@@ -13,6 +13,7 @@ from PIL import Image
 
 from gui_agents.s3.agents.grounding import OSWorldACI
 from gui_agents.s3.agents.agent_s import AgentS3
+from gui_agents.s3.core.engine import check_claude_code_login
 from gui_agents.s3.utils.local_env import LocalEnv
 
 current_platform = platform.system().lower()
@@ -152,12 +153,20 @@ def scale_screen_dimensions(width: int, height: int, max_dim_size: int):
     return safe_width, safe_height
 
 
-def run_agent(agent, instruction: str, scaled_width: int, scaled_height: int):
+def claude_grounding_dimensions(width: int, height: int):
+    # Claude locates elements most accurately on screenshots of about 1280x800 (WXGA)
+    scale_factor = min(1280 / width, 800 / height, 1)
+    return int(width * scale_factor), int(height * scale_factor)
+
+
+def run_agent(
+    agent, instruction: str, scaled_width: int, scaled_height: int, max_steps=15
+):
     global paused
     obs = {}
     traj = "Task:\n" + instruction
     subtask_traj = ""
-    for step in range(15):
+    for step in range(max_steps):
         # Check if we're in paused state and wait
         while paused:
             time.sleep(0.1)
@@ -178,7 +187,7 @@ def run_agent(agent, instruction: str, scaled_width: int, scaled_height: int):
         while paused:
             time.sleep(0.1)
 
-        print(f"\n🔄 Step {step + 1}/15: Getting next action from agent...")
+        print(f"\n🔄 Step {step + 1}/{max_steps}: Getting next action from agent...")
 
         # Get next action code from the agent
         info, code = agent.predict(instruction=instruction, observation=obs)
@@ -230,14 +239,15 @@ def main():
     parser.add_argument(
         "--provider",
         type=str,
-        default="openai",
-        help="Specify the provider to use (e.g., openai, anthropic, etc.)",
+        default="claude_code",
+        help="Specify the provider to use (e.g., claude_code, openai, anthropic, etc.). "
+        "claude_code uses the Claude subscription the `claude` CLI is logged in with, no API key needed.",
     )
     parser.add_argument(
         "--model",
         type=str,
-        default="gpt-5-2025-08-07",
-        help="Specify the model to use (e.g., gpt-5-2025-08-07)",
+        default="sonnet",
+        help="Specify the model to use (e.g., sonnet, opus or a full Claude model ID for claude_code; gpt-5-2025-08-07 for openai)",
     )
     parser.add_argument(
         "--model_url",
@@ -258,18 +268,18 @@ def main():
         help="Temperature to fix the generation model at (e.g. o3 can only be run with 1.0)",
     )
 
-    # Grounding model config: Self-hosted endpoint based (required)
+    # Grounding model config: Claude through the Claude Code CLI by default, or a self-hosted endpoint
     parser.add_argument(
         "--ground_provider",
         type=str,
-        required=True,
-        help="The provider for the grounding model",
+        default="claude_code",
+        help="The provider for the grounding model (claude_code by default, or e.g. huggingface for UI-TARS)",
     )
     parser.add_argument(
         "--ground_url",
         type=str,
-        required=True,
-        help="The URL of the grounding model",
+        default="",
+        help="The URL of the grounding model (not needed for claude_code)",
     )
     parser.add_argument(
         "--ground_api_key",
@@ -280,20 +290,20 @@ def main():
     parser.add_argument(
         "--ground_model",
         type=str,
-        required=True,
-        help="The model name for the grounding model",
+        default=None,
+        help="The model name for the grounding model (defaults to --model for claude_code)",
     )
     parser.add_argument(
         "--grounding_width",
         type=int,
-        required=True,
-        help="Width of screenshot image after processor rescaling",
+        default=None,
+        help="Width of screenshot image after processor rescaling (worked out from the screen for claude_code)",
     )
     parser.add_argument(
         "--grounding_height",
         type=int,
-        required=True,
-        help="Height of screenshot image after processor rescaling",
+        default=None,
+        help="Height of screenshot image after processor rescaling (worked out from the screen for claude_code)",
     )
 
     # AgentS3 specific arguments
@@ -316,6 +326,12 @@ def main():
         help="Enable local coding environment for code execution (WARNING: Executes arbitrary code locally)",
     )
     parser.add_argument(
+        "--max_steps",
+        type=int,
+        default=15,
+        help="Maximum number of actions the agent takes for a task",
+    )
+    parser.add_argument(
         "--task",
         type=str,
         help="The task instruction for Agent-S3 to perform.",
@@ -323,11 +339,41 @@ def main():
 
     args = parser.parse_args()
 
+    if args.ground_provider != "claude_code":
+        missing = [
+            flag
+            for flag, value in [
+                ("--ground_url", args.ground_url),
+                ("--ground_model", args.ground_model),
+                ("--grounding_width", args.grounding_width),
+                ("--grounding_height", args.grounding_height),
+            ]
+            if not value
+        ]
+        if missing:
+            parser.error(
+                f"{', '.join(missing)} required when --ground_provider is {args.ground_provider}"
+            )
+
+    if "claude_code" in (args.provider, args.ground_provider):
+        ok, message = check_claude_code_login()
+        print(message)
+        if not ok:
+            sys.exit(1)
+
     # Re-scales screenshot size to ensure it fits in UI-TARS context limit
     screen_width, screen_height = pyautogui.size()
     scaled_width, scaled_height = scale_screen_dimensions(
         screen_width, screen_height, max_dim_size=2400
     )
+
+    grounding_width, grounding_height = args.grounding_width, args.grounding_height
+    if args.ground_provider == "claude_code" and not (
+        grounding_width and grounding_height
+    ):
+        grounding_width, grounding_height = claude_grounding_dimensions(
+            screen_width, screen_height
+        )
 
     # Load the general engine params
     engine_params = {
@@ -341,11 +387,11 @@ def main():
     # Load the grounding engine from a custom endpoint
     engine_params_for_grounding = {
         "engine_type": args.ground_provider,
-        "model": args.ground_model,
+        "model": args.ground_model or args.model,
         "base_url": args.ground_url,
         "api_key": args.ground_api_key,
-        "grounding_width": args.grounding_width,
-        "grounding_height": args.grounding_height,
+        "grounding_width": grounding_width,
+        "grounding_height": grounding_height,
     }
 
     # Initialize environment based on user preference
@@ -378,7 +424,7 @@ def main():
     # handle query from command line
     if isinstance(task, str) and task.strip():
         agent.reset()
-        run_agent(agent, task, scaled_width, scaled_height)
+        run_agent(agent, task, scaled_width, scaled_height, args.max_steps)
         return
 
     while True:
@@ -387,7 +433,7 @@ def main():
         agent.reset()
 
         # Run the agent on your own device
-        run_agent(agent, query, scaled_width, scaled_height)
+        run_agent(agent, query, scaled_width, scaled_height, args.max_steps)
 
         response = input("Would you like to provide another query? (y/n): ")
         if response.lower() != "y":

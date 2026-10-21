@@ -61,8 +61,8 @@ agent_s_task(task="Open System Preferences and check the current display resolut
 ## Technical Details
 
 Agent-S uses:
-- **Main Model**: Claude Sonnet 4.5 for reasoning and planning
-- **Grounding Model**: UI-TARS-1.5-7B for visual grounding and coordinate extraction
+- **Main Model**: Claude Sonnet for reasoning and planning, through the `claude` CLI on the user's Claude subscription (no API key)
+- **Grounding Model**: Claude as well by default, or UI-TARS-1.5-7B when `AGENT_S_GROUND_URL` is set
 - **Screen Resolution**: Automatically scaled to 2400px max dimension
 - **Platform Support**: macOS, Linux, Windows
 
@@ -75,16 +75,16 @@ Agent-S uses:
 
 ## Configuration
 
-Agent-S requires configuration via environment variables:
-
 **Required:**
-- `ANTHROPIC_API_KEY`: API key for Claude model
-- `AGENT_S_GROUND_URL`: Grounding model endpoint URL
+- The `claude` CLI installed and logged in with a Claude subscription (`claude auth status` shows `"loggedIn": true`). No API key is needed.
+
+**Optional environment variables:**
+- `AGENT_S_MODEL`: Claude model (default: sonnet)
+- `AGENT_S_PROVIDER`: Another provider such as openai, which then needs its API key (default: claude_code)
+- `AGENT_S_GROUND_URL`: UI-TARS grounding endpoint URL, to use instead of Claude grounding
 - `AGENT_S_GROUND_MODEL`: Grounding model name (default: ui-tars-1.5-7b)
 - `AGENT_S_GROUNDING_WIDTH`: Output width (default: 1920)
 - `AGENT_S_GROUNDING_HEIGHT`: Output height (default: 1080)
-
-**Optional:**
 - `AGENT_S_GROUND_API_KEY`: API key for grounding endpoint
 
 See the README.md in this directory for detailed setup instructions.
@@ -99,4 +99,4 @@ See the README.md in this directory for detailed setup instructions.
 ## Source
 
 Agent-S GitHub: https://github.com/simular-ai/Agent-S
-Installation: `pip install gui-agents`
+Installation: `pip install git+https://github.com/KanishkThakar/Agent-S.git`

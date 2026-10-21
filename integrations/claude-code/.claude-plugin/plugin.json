@@ -1,0 +1,10 @@
+{
+  "name": "agent-s",
+  "version": "0.1.0",
+  "description": "Let Claude Code hand GUI tasks on your computer to Agent S, running on your Claude subscription with no API key.",
+  "author": {
+    "name": "Kanishk Thakar"
+  },
+  "repository": "https://github.com/KanishkThakar/Agent-S",
+  "license": "Apache-2.0"
+}

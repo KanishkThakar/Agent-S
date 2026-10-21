@@ -10,9 +10,9 @@ Agent-S is a powerful autonomous agent that can control your computer's graphica
 
 ### Required Software
 
-1. **Agent-S**: Install the gui-agents package
+1. **Agent-S**: Install the gui-agents package from this repository (the PyPI release does not have the `claude_code` provider yet)
    ```bash
-   pip install gui-agents
+   pip install git+https://github.com/KanishkThakar/Agent-S.git
    ```
 
 2. **Tesseract**: Required for OCR functionality
@@ -22,38 +22,32 @@ Agent-S is a powerful autonomous agent that can control your computer's graphica
    sudo apt install tesseract-ocr  # Linux
    ```
 
-3. **OpenClaw**: This integration is designed to work with OpenClaw
+3. **Claude Code**: Agent-S runs Claude through the `claude` CLI on your Claude Pro or Max subscription. Install it and log in once:
+   ```bash
+   curl -fsSL https://claude.ai/install.sh | bash
+   claude   # run /login inside if needed, then exit
+   ```
 
-### Required Environment Variables
+4. **OpenClaw**: This integration is designed to work with OpenClaw
 
-You need at least one API key for your chosen provider:
+### No API Key Needed
 
-- **`ANTHROPIC_API_KEY`**: For Claude models (Anthropic provider)
-  ```bash
-  export ANTHROPIC_API_KEY="your-api-key-here"
-  ```
+By default the wrapper uses the `claude_code` provider with Claude Sonnet, for both planning and grounding (finding where to click). Every call goes through your logged-in `claude` CLI, so you do not need `ANTHROPIC_API_KEY`, and the wrapper never bills one even if it is set.
 
-- **`OPENAI_API_KEY`**: For GPT models (OpenAI provider)
-  ```bash
-  export OPENAI_API_KEY="your-api-key-here"
-  ```
+Optional settings:
 
-- **`GEMINI_API_KEY`**: For Gemini models (Google provider)
-  ```bash
-  export GEMINI_API_KEY="your-api-key-here"
-  ```
+- **`AGENT_S_MODEL`**: Claude model for the `claude_code` provider (default: "sonnet"; "opus" and "haiku" also work)
+- **`AGENT_S_PROVIDER`**: Use a different provider, such as "openai" with `OPENAI_API_KEY` (default: "claude_code")
 
-By default, the wrapper uses Anthropic's Claude Sonnet 4.5. You can modify `agent_s_wrapper.py` to use a different provider and model.
+### Grounding Model Configuration (Optional)
 
-### Grounding Model Configuration (Required)
+Claude does the grounding unless you set `AGENT_S_GROUND_URL`. To use [UI-TARS-1.5-7B](https://huggingface.co/ByteDance-Seed/UI-TARS-1.5-7B) instead:
 
-Agent-S requires a grounding model for visual element detection. We recommend [UI-TARS-1.5-7B](https://huggingface.co/ByteDance-Seed/UI-TARS-1.5-7B):
-
-- **`AGENT_S_GROUND_URL`** (Required): Grounding model endpoint URL
-- **`AGENT_S_GROUND_MODEL`** (Required): Model name (default: "ui-tars-1.5-7b")
-- **`AGENT_S_GROUNDING_WIDTH`** (Required): Output coordinate width (default: "1920")
-- **`AGENT_S_GROUNDING_HEIGHT`** (Required): Output coordinate height (default: "1080")
-- **`AGENT_S_GROUND_API_KEY`** (Optional): API key for grounding endpoint
+- **`AGENT_S_GROUND_URL`**: Grounding model endpoint URL
+- **`AGENT_S_GROUND_MODEL`**: Model name (default: "ui-tars-1.5-7b")
+- **`AGENT_S_GROUNDING_WIDTH`**: Output coordinate width (default: "1920")
+- **`AGENT_S_GROUNDING_HEIGHT`**: Output coordinate height (default: "1080")
+- **`AGENT_S_GROUND_API_KEY`**: API key for grounding endpoint
 
 Example configuration:
 ```bash
@@ -158,8 +152,7 @@ Verify the integration works:
 ### Verification Checklist
 
 - [ ] `agent_s` executable is in PATH
-- [ ] `ANTHROPIC_API_KEY` is set
-- [ ] `AGENT_S_GROUND_URL` is set (grounding model endpoint)
+- [ ] `claude auth status` reports `"loggedIn": true`
 - [ ] Scripts are executable
 - [ ] OpenClaw agent can read skill files
 - [ ] Test task executes successfully
@@ -170,24 +163,16 @@ All configuration is done via environment variables (see Prerequisites section a
 
 ### Customizing the Provider and Model
 
-By default, the wrapper uses Anthropic's Claude Sonnet 4.5. To use a different provider or model, modify the `agent_s_wrapper.py` file:
+By default, the wrapper uses Claude Sonnet on your Claude subscription. To use a different model or provider, set environment variables:
 
-```python
-# For OpenAI
-cmd = [
-    agent_s_path,
-    "--provider", "openai",
-    "--model", "gpt-5-2025-08-07",  # or other OpenAI models
-    ...
-]
+```bash
+# A different Claude model on your subscription
+export AGENT_S_MODEL="opus"
 
-# For Gemini
-cmd = [
-    agent_s_path,
-    "--provider", "gemini",
-    "--model", "gemini-2.0-flash-exp",  # or other Gemini models
-    ...
-]
+# OpenAI with an API key
+export AGENT_S_PROVIDER="openai"
+export AGENT_S_MODEL="gpt-5-2025-08-07"
+export OPENAI_API_KEY="your-api-key-here"
 ```
 
 See the [Agent-S models documentation](https://github.com/simular-ai/Agent-S/blob/main/models.md) for all supported providers and models.
@@ -221,7 +206,7 @@ which agent_s
 
 If not found, install gui-agents:
 ```bash
-pip install gui-agents
+pip install git+https://github.com/KanishkThakar/Agent-S.git
 ```
 
 ### Permission errors
@@ -232,30 +217,15 @@ chmod +x ./agent_s_task
 chmod +x ./agent_s_wrapper.py
 ```
 
-### API errors
+### Claude login errors
 
-Check that your API key is set for your chosen provider:
+Agent-S stops at startup if the `claude` CLI is missing or logged out. Check:
 ```bash
-# For Anthropic (default)
-echo $ANTHROPIC_API_KEY
-
-# For OpenAI
-echo $OPENAI_API_KEY
-
-# For Gemini
-echo $GEMINI_API_KEY
+which claude
+claude auth status
 ```
 
-If empty, add it to your shell profile (`~/.zshrc` or `~/.bashrc`):
-```bash
-export ANTHROPIC_API_KEY="your-key-here"
-# or
-export OPENAI_API_KEY="your-key-here"
-# or
-export GEMINI_API_KEY="your-key-here"
-
-source ~/.zshrc  # or ~/.bashrc
-```
+If `loggedIn` is false, run `claude`, log in with `/login` using your Claude subscription, and exit. If you hit your plan's usage limit, Agent-S reports the CLI's message; wait for the limit to reset or switch to a smaller model with `AGENT_S_MODEL="haiku"`.
 
 ### Task failures
 
@@ -266,7 +236,7 @@ source ~/.zshrc  # or ~/.bashrc
 
 ### Grounding model issues
 
-If you see errors about grounding:
+If clicks land in the wrong place with the default Claude grounding, describe the target element more specifically in the task. If you use a UI-TARS endpoint:
 - Verify `AGENT_S_GROUND_URL` is accessible
 - Check `AGENT_S_GROUND_API_KEY` is correct
 - Ensure grounding dimensions match your model's output resolution

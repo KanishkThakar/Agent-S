@@ -1,4 +1,26 @@
-We support the following APIs for MLLM inference: OpenAI, Anthropic, Gemini, Azure OpenAI, vLLM for local models, and Open Router. To use these APIs, you need to set the corresponding environment variables:
+We support the following APIs for MLLM inference: your Claude subscription through Claude Code, OpenAI, Anthropic, Gemini, Azure OpenAI, vLLM for local models, and Open Router.
+
+0. Claude subscription through Claude Code (no API key, Agent S3 / `gui_agents.s3`)
+
+Install [Claude Code](https://claude.com/claude-code), run `claude` once and log in with your Claude Pro or Max plan. Agent S then calls Claude through the `claude` CLI, so nothing needs to be exported. Set `CLAUDE_CODE_PATH` only if `claude` is not on your `PATH`.
+
+```python
+engine_params = {
+    "engine_type": "claude_code",
+    "model": "sonnet",  # or "opus", "haiku", or a full model ID such as "claude-sonnet-5-5"
+}
+
+# Claude can also be the grounding model. Screenshots are resized to this size,
+# so keep the screen's aspect ratio and fit it within about 1280x800.
+engine_params_for_grounding = {
+    "engine_type": "claude_code",
+    "model": "sonnet",
+    "grounding_width": 1280,
+    "grounding_height": 800,
+}
+```
+
+For the API providers below, you need to set the corresponding environment variables:
 
 1. OpenAI
 

@@ -5,6 +5,7 @@ import numpy as np
 from gui_agents.s3.core.engine import (
     LMMEngineAnthropic,
     LMMEngineAzureOpenAI,
+    LMMEngineClaudeCode,
     LMMEngineHuggingFace,
     LMMEngineOpenAI,
     LMMEngineOpenRouter,
@@ -23,6 +24,8 @@ class LMMAgent:
                     self.engine = LMMEngineOpenAI(**engine_params)
                 elif engine_type == "anthropic":
                     self.engine = LMMEngineAnthropic(**engine_params)
+                elif engine_type == "claude_code":
+                    self.engine = LMMEngineClaudeCode(**engine_params)
                 elif engine_type == "azure":
                     self.engine = LMMEngineAzureOpenAI(**engine_params)
                 elif engine_type == "vllm":
@@ -243,8 +246,8 @@ class LMMAgent:
 
             self.messages.append(message)
 
-        # For API-style inference from Anthropic
-        elif isinstance(self.engine, LMMEngineAnthropic):
+        # For API-style inference from Anthropic, or Claude through the Claude Code CLI
+        elif isinstance(self.engine, (LMMEngineAnthropic, LMMEngineClaudeCode)):
             # infer role from previous message
             if role != "user":
                 if self.messages[-1]["role"] == "system":
