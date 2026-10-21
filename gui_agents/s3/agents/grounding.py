@@ -206,6 +206,11 @@ class OSWorldACI(ACI):
         # Screenshot used during ACI execution
         self.obs = None
 
+        # Coordinates already found on the current screenshot. The worker evaluates an
+        # action once to validate it and again to run it, so this halves grounding calls.
+        self.coords_cache = {}
+        self.coords_screenshot = None
+
         # Configure the visual grounding model responsible for coordinate generation
         self.grounding_model = LMMAgent(engine_params_for_grounding)
         self.engine_params_for_grounding = engine_params_for_grounding
@@ -228,6 +233,11 @@ class OSWorldACI(ACI):
 
     # Given the state and worker's referring expression, use the grounding model to generate (x,y)
     def generate_coords(self, ref_expr: str, obs: Dict) -> List[int]:
+        if obs["screenshot"] is not self.coords_screenshot:
+            self.coords_cache = {}
+            self.coords_screenshot = obs["screenshot"]
+        if ref_expr in self.coords_cache:
+            return self.coords_cache[ref_expr]
 
         # Reset the grounding model state
         self.grounding_model.reset()
@@ -243,7 +253,9 @@ class OSWorldACI(ACI):
         print("RAW GROUNDING MODEL RESPONSE:", response)
         numericals = re.findall(r"\d+", response)
         assert len(numericals) >= 2
-        return [int(numericals[0]), int(numericals[1])]
+        coords = [int(numericals[0]), int(numericals[1])]
+        self.coords_cache[ref_expr] = coords
+        return coords
 
     # Calls pytesseract to generate word level bounding boxes for text grounding
     def get_ocr_elements(self, b64_image_data: str) -> Tuple[str, List]:

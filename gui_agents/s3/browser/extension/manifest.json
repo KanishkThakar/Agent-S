@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Agent S",
+  "version": "0.1.1",
+  "description": "Lets Agent S work in its own Chrome tab group with its own cursor, without using your mouse or keyboard.",
+  "permissions": ["debugger", "tabs", "tabGroups", "storage", "alarms"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Agent S",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

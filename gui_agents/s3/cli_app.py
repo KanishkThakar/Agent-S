@@ -6,6 +6,7 @@ import os
 import platform
 import pyautogui
 import signal
+import subprocess
 import sys
 import time
 
@@ -13,6 +14,8 @@ from PIL import Image
 
 from gui_agents.s3.agents.grounding import OSWorldACI
 from gui_agents.s3.agents.agent_s import AgentS3
+from gui_agents.s3.browser.aci import BROWSER_PLATFORM, BrowserACI
+from gui_agents.s3.browser.bridge import EXTENSION_DIR, ChromeBridge
 from gui_agents.s3.core.engine import check_claude_code_login
 from gui_agents.s3.utils.local_env import LocalEnv
 
@@ -234,6 +237,77 @@ def run_agent(
                 )
 
 
+def connect_browser(port: int) -> ChromeBridge:
+    browser = ChromeBridge(port=port)
+    if not browser.wait_for_extension(5):
+        print(
+            f"Waiting for the Agent S Chrome extension to connect on port {port}...\n"
+            "If it is not installed yet: open chrome://extensions in Chrome, turn on "
+            "Developer mode, click 'Load unpacked' and choose this folder:\n"
+            f"  {EXTENSION_DIR}"
+        )
+        browser.wait_for_extension()
+    print(
+        "Agent S extension connected. Agent S works in the purple 'Agent S' tab group "
+        "with its own cursor, so you can keep using your mouse, keyboard and other tabs."
+    )
+    return browser
+
+
+def run_browser_agent(agent, grounding_agent, browser, instruction: str, max_steps=15):
+    """Run a task in Agent S's own Chrome tab; the tab must already be started."""
+    global paused
+    status = "stopped"
+    try:
+        for step in range(max_steps):
+            while paused:
+                time.sleep(0.1)
+            screenshot_bytes, width, height = browser.screenshot()
+            # The tab can be resized between steps; coordinates follow its current size
+            grounding_agent.width, grounding_agent.height = width, height
+
+            print(
+                f"\n🔄 Step {step + 1}/{max_steps}: Getting next action from agent..."
+            )
+            info, code = agent.predict(
+                instruction=instruction, observation={"screenshot": screenshot_bytes}
+            )
+            action = code[0].strip()
+
+            if action in ("DONE", "FAIL"):
+                status = "done" if action == "DONE" else "failed"
+                break
+            if action in ("NEXT", "WAIT"):
+                continue
+
+            while paused:
+                time.sleep(0.1)
+            print("EXECUTING CODE:", action)
+            # Runs in the agent's tab through the extension, not on your screen
+            exec(action, {"browser": browser})
+            time.sleep(1.0)
+    except (ConnectionError, RuntimeError) as e:
+        print(f"\n🛑 Agent S stopped: {e}")
+        status = "failed"
+    finally:
+        try:
+            browser.stop(status)
+        except Exception as e:
+            logger.warning("Could not hand the Agent S tab back: %s", e)
+
+    print(f"\nAgent S finished the task: {status}")
+    if platform.system() == "Darwin":
+        subprocess.run(
+            [
+                "osascript",
+                "-e",
+                f'display notification "Task {status}" with title "Agent S"',
+            ],
+            check=False,
+        )
+    return status
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run AgentS3 with specified model.")
     parser.add_argument(
@@ -332,6 +406,25 @@ def main():
         help="Maximum number of actions the agent takes for a task",
     )
     parser.add_argument(
+        "--browser",
+        action="store_true",
+        default=False,
+        help="Work in Agent S's own tab group in your Chrome, with its own cursor, instead of "
+        "using your mouse and keyboard. Needs the Agent S Chrome extension.",
+    )
+    parser.add_argument(
+        "--browser_port",
+        type=int,
+        default=8765,
+        help="Local port the Agent S Chrome extension connects to",
+    )
+    parser.add_argument(
+        "--start_url",
+        type=str,
+        default="https://www.google.com",
+        help="Page the agent's Chrome tab opens first (with --browser)",
+    )
+    parser.add_argument(
         "--task",
         type=str,
         help="The task instruction for Agent-S3 to perform.",
@@ -361,8 +454,15 @@ def main():
         if not ok:
             sys.exit(1)
 
+    browser = None
+    if args.browser:
+        browser = connect_browser(args.browser_port)
+        browser.start(args.start_url)
+        _, screen_width, screen_height = browser.screenshot()
+    else:
+        screen_width, screen_height = pyautogui.size()
+
     # Re-scales screenshot size to ensure it fits in UI-TARS context limit
-    screen_width, screen_height = pyautogui.size()
     scaled_width, scaled_height = scale_screen_dimensions(
         screen_width, screen_height, max_dim_size=2400
     )
@@ -396,48 +496,63 @@ def main():
 
     # Initialize environment based on user preference
     local_env = None
-    if args.enable_local_env:
+    if args.enable_local_env and args.browser:
+        print("The local coding environment is not available with --browser.")
+    elif args.enable_local_env:
         print(
             "⚠️  WARNING: Local coding environment enabled. This will execute arbitrary code locally!"
         )
         local_env = LocalEnv()
 
-    grounding_agent = OSWorldACI(
-        env=local_env,
-        platform=current_platform,
-        engine_params_for_generation=engine_params,
-        engine_params_for_grounding=engine_params_for_grounding,
-        width=screen_width,
-        height=screen_height,
-    )
+    if args.browser:
+        grounding_agent = BrowserACI(
+            engine_params_for_generation=engine_params,
+            engine_params_for_grounding=engine_params_for_grounding,
+            width=screen_width,
+            height=screen_height,
+        )
+    else:
+        grounding_agent = OSWorldACI(
+            env=local_env,
+            platform=current_platform,
+            engine_params_for_generation=engine_params,
+            engine_params_for_grounding=engine_params_for_grounding,
+            width=screen_width,
+            height=screen_height,
+        )
 
     agent = AgentS3(
         engine_params,
         grounding_agent,
-        platform=current_platform,
+        platform=BROWSER_PLATFORM if args.browser else current_platform,
         max_trajectory_length=args.max_trajectory_length,
         enable_reflection=args.enable_reflection,
     )
+
+    def run(query):
+        agent.reset()
+        if browser:
+            run_browser_agent(agent, grounding_agent, browser, query, args.max_steps)
+        else:
+            # Run the agent on your own device
+            run_agent(agent, query, scaled_width, scaled_height, args.max_steps)
 
     task = args.task
 
     # handle query from command line
     if isinstance(task, str) and task.strip():
-        agent.reset()
-        run_agent(agent, task, scaled_width, scaled_height, args.max_steps)
+        run(task)
         return
 
     while True:
         query = input("Query: ")
-
-        agent.reset()
-
-        # Run the agent on your own device
-        run_agent(agent, query, scaled_width, scaled_height, args.max_steps)
+        run(query)
 
         response = input("Would you like to provide another query? (y/n): ")
         if response.lower() != "y":
             break
+        if browser:
+            browser.start(args.start_url)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,8 @@ setup(
     author_email="eric@simular.ai",
     # agent_s4 is a separate distribution (agent_s4/pyproject.toml).
     packages=find_packages(include=["gui_agents", "gui_agents.*"]),
+    # The Agent S Chrome extension used by `agent_s --browser`
+    package_data={"gui_agents.s3.browser": ["extension/*", "extension/icons/*"]},
     install_requires=[
         "numpy",
         "backoff",

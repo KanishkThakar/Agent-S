@@ -177,6 +177,20 @@ Agent S3 can run entirely on a Claude Pro or Max subscription. The `claude_code`
 
 On macOS, give your terminal Screen Recording and Accessibility permission (System Settings → Privacy & Security) so Agent S can see the screen and click.
 
+#### Let it work in Chrome on its own (`--browser`)
+
+By default Agent S drives your real mouse and keyboard, so you have to leave the computer alone while it works. With `--browser` it works like ChatGPT's agent instead: in your own signed-in Chrome, in a purple **Agent S** tab group, with its own animated cursor. Clicks and keys go only to its tab through Chrome's DevTools protocol, so you can keep using your mouse, keyboard, other tabs and other apps the whole time.
+
+1. Load the extension once. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and choose [`gui_agents/s3/browser/extension`](gui_agents/s3/browser/extension). Nothing is downloaded; the extension is in this repository.
+2. Run a task:
+   ```bash
+   agent_s --browser --task "Search Wikipedia for Alan Turing and open his article"
+   ```
+
+The agent opens its tab in the background, so the tab you are on stays in front. When it finishes, the group is renamed "Agent S ✓" (or "Agent S ✗" if it failed) and you get a notification. Chrome shows a "started debugging this browser" bar while it works; clicking **Cancel** there stops the agent. `--start_url` sets the first page (Google by default).
+
+Because it uses your signed-in Chrome, the agent can act on any site you are logged in to. Give it tasks you would be comfortable doing yourself, and watch its tab for anything sensitive. It accepts plain alerts on its own but dismisses confirmation prompts, so it never agrees to something for you. Only web pages are available in this mode, not other apps.
+
 #### Use Agent S from Claude Code
 
 This repository is also a Claude Code plugin. Install it, then ask Claude Code for a desktop task (for example "use Agent S to open Calculator") and it runs `agent_s` for you:
@@ -267,6 +281,9 @@ agent_s \
 - **`--grounding_width`**: Width of the output coordinate resolution from the grounding model - **Required** unless the grounding provider is claude_code, which works it out from your screen
 - **`--grounding_height`**: Height of the output coordinate resolution from the grounding model - **Required** unless the grounding provider is claude_code, which works it out from your screen
 - **`--max_steps`**: Maximum number of actions for a task - Default: 15
+- **`--browser`**: Work in Agent S's own Chrome tab group with its own cursor instead of your mouse and keyboard (needs the Agent S extension, see above) - Default: off
+- **`--browser_port`**: Local port the extension connects to; set the same port in the extension's popup - Default: 8765
+- **`--start_url`**: First page of the agent's tab with `--browser` - Default: "https://www.google.com"
 
 #### Optional Parameters
 - **`--model_temperature`**: The temperature to fix all model calls to (necessary to set to 1.0 for models like o3 but can be left blank for other models)

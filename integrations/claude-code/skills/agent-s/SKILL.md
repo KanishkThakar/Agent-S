@@ -1,6 +1,6 @@
 ---
 name: agent-s
-description: Operate the desktop GUI of this computer with Agent S (mouse, keyboard and screen), using the user's Claude subscription. Use when the user asks to do something in a desktop or web app that has no CLI or API, such as "open Calculator", "click through this settings dialog" or "fill in this form in Safari".
+description: Operate websites in the user's own Chrome (its own tab group and cursor, without touching their mouse) or the desktop GUI of this computer with Agent S, using the user's Claude subscription. Use when the user asks to do something in a desktop or web app that has no CLI or API, such as "open Calculator", "click through this settings dialog" or "fill in this form in Safari".
 ---
 
 # Agent S: GUI tasks on this computer
@@ -15,9 +15,15 @@ Agent S looks at the screen, then clicks, types and scrolls until a task is done
 
 ## Running a task
 
-Tell the user that Agent S will take over the mouse and keyboard until it finishes, and that pressing Ctrl+C in the terminal pauses it.
+There are two modes. Run either one in the background, because a task can take several minutes.
 
-Then run it, in the background because a task can take several minutes:
+**Website tasks: use `--browser`.** Agent S works in the user's own signed-in Chrome, in a purple "Agent S" tab group, with its own cursor, and never touches their mouse or keyboard, so they can keep working. It needs the Agent S extension: if `agent_s` prints "Waiting for the Agent S Chrome extension", ask the user to open `chrome://extensions`, turn on Developer mode, click Load unpacked and choose `gui_agents/s3/browser/extension` in the repository.
+
+```bash
+agent_s --browser --task "Search Wikipedia for Alan Turing and open his article" --max_steps 15
+```
+
+**Desktop apps: no flag.** Agent S then drives the real mouse and keyboard. Tell the user it will take over both until it finishes, that they should not type meanwhile, and that pressing Ctrl+C in the terminal pauses it.
 
 ```bash
 agent_s --task "Open Calculator and compute 12 * 34" --max_steps 15
@@ -32,6 +38,6 @@ When the run ends, read its output (the last plan and action), check the result 
 
 ## Limits
 
-- One monitor only.
-- Each step makes three or four Claude calls and takes about 10 to 20 seconds, and all of them count against the user's subscription usage limits.
-- On macOS a "Task Completed" dialog appears at the end and waits for the user to click OK.
+- Desktop mode: one monitor only, and on macOS a "Task Completed" dialog appears at the end and waits for the user to click OK.
+- Browser mode: web pages only. The agent acts in the user's logged-in sessions, so do not give it tasks the user has not asked for. Never put the user's passwords in a task; if a site needs a sign-in, ask the user to sign in in Chrome first.
+- Each step makes three or four Claude calls and takes about 10 to 30 seconds, and all of them count against the user's subscription usage limits.
